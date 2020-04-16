@@ -74,12 +74,14 @@ static void spiserver_handleAsynchronous(struct spiserver_dev *spi, msg_t *msg)
     mutexUnlock(spi->lock);
 }
 
+/* TODO remove unnecessary printf */
 static void spiserver_handleCtl(struct spiserver_dev *spi, msg_t *msg)
 { 
     mutexLock(spi->lock);
     struct spiserver_ctl ctl = *(struct spiserver_ctl *)msg->i.raw;
     if ((ctl.fun & set_init) != 0) {
         ecspi_init(ctl.dev_no, ctl.chan_msk);
+        printf("set_init %d %d\n", ctl.dev_no, ctl.chan_msk);
         spi->init = 1;
     }
 
@@ -89,20 +91,30 @@ static void spiserver_handleCtl(struct spiserver_dev *spi, msg_t *msg)
         return;
     }
 
-    if ((ctl.fun & set_channel) != 0)
+    if ((ctl.fun & set_channel) != 0) {
         ecspi_setChannel(ctl.dev_no, ctl.chan);
+        printf("ecspi_setChannel %d %d\n", ctl.dev_no, ctl.chan);
+    }
 
-    if ((ctl.fun & set_mode) != 0)
+    if ((ctl.fun & set_mode) != 0) {
         ecspi_setMode(ctl.dev_no, ctl.chan, ctl.mode);
+        printf("ecspi_setMode %d %d %d\n", ctl.dev_no, ctl.chan, ctl.mode);
+    }
 
-    if ((ctl.fun & set_clockDiv) != 0)
+    if ((ctl.fun & set_clockDiv) != 0) {
         ecspi_setClockDiv(ctl.dev_no, ctl.pre, ctl.post);
+        printf("ecspi_setClockDiv %d %d %d\n", ctl.dev_no, ctl.pre, ctl.post);
+    }
 
-    if ((ctl.fun & set_csDelay) != 0) 
+    if ((ctl.fun & set_csDelay) != 0) {
         ecspi_setCSDelay(ctl.dev_no, ctl.csDelay);
+        printf("ecspi_setCSDelay %d %d\n", ctl.dev_no, ctl.csDelay);
+    }
 
-    if ((ctl.fun & set_ssDelay) != 0)
+    if ((ctl.fun & set_ssDelay) != 0) {
         ecspi_setSSDelay(ctl.dev_no, ctl.ssDelay);
+        printf("ecspi_setSSDelay %d %d\n", ctl.dev_no, ctl.ssDelay);
+    }
     
     mutexUnlock(spi->lock); 
 }
