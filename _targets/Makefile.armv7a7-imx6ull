@@ -9,6 +9,8 @@
 include dma/imx6ull-sdma/Makefile
 include gpio/imx6ull-gpio/Makefile
 include spi/imx6ull-ecspi/Makefile
+include spi/spi-server/Makefile
+include spi/imu-LSM303D/Makefile
 
 include storage/imx6ull-flash/Makefile
 include storage/imx6ull-nandtool/Makefile
