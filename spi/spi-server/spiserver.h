@@ -12,11 +12,8 @@
  */
 
 #include <sys/msg.h>
-
-/* TODO Move to .c */
 #include <ecspi.h> /* SPI api */
 
-/* Any convention for naming enums? Not naming? */
 enum {
     set_init        = 0x00000001,
     set_channel     = 0x00000002,
@@ -38,7 +35,7 @@ struct spiserver_ctl {
     int dev_no;
     uint8_t chan_msk;
     uint8_t chan;
-    uint8_t mode;  /* */
+    uint8_t mode;
     uint8_t pre; /* pre-divider value for the clock signal */
     uint8_t post; /* post-divider value for the clock signal */
     uint8_t csDelay;
