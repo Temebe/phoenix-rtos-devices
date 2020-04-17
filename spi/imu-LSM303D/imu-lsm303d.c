@@ -47,7 +47,7 @@ static uint8_t readRegister(msg_t *msg, uint8_t address)
 
 static int writeRegister(msg_t *msg, uint8_t address, uint8_t message)
 {
-    msg->type = mtRead;
+    msg->type = mtWrite;
     ((uint8_t *)msg->i.data)[0] = WRITE_OP | address;
     ((uint8_t *)msg->i.data)[1] = message;
 

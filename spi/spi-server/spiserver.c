@@ -70,7 +70,7 @@ static void spiserver_handleAsynchronous(struct spiserver_dev *spi, msg_t *msg)
 {
     mutexLock(spi->lock);
     msg->o.io.err = err_ok;
-    ecspi_writeAsync(&spi->ctx, msg->o.data, msg->o.size);
+    ecspi_writeAsync(&spi->ctx, msg->i.data, msg->i.size);
     mutexUnlock(spi->lock);
 }
 
@@ -135,7 +135,6 @@ static void spiserver_messageThread(void *arg)
     unsigned int rid = 0;
 
     data = (struct spiserver_threadData*)arg;
-    //printf("spiserver: Starting SPI manager thread, message port %d\n", data->port);
     
     for (;;) {
         if (msgRecv(data->port, &msg, &rid) < 0)
@@ -172,12 +171,13 @@ static void spiserver_messageThread(void *arg)
 /* TODO Remove unnecessary printf later */
 int main(int argc, char **argv)
 {
-    printf("spi[%s %s]\n", __DATE__, __TIME__);
     char stack[thrAmount][1024] __attribute__((aligned(8)));
     oid_t spiOid[4];
     struct spiserver_dev spi[4];
     struct spiserver_threadData data;
     char portName[10];
+
+    printf("spi[%s %s]\n", __DATE__, __TIME__);
 
     /* Create and register port for clients */
     portCreate(&data.port);
