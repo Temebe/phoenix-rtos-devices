@@ -43,34 +43,35 @@ struct spiserver_threadData {
 };
 
 
-static void spiserver_handleSynchronous(struct spiserver_dev *spi, msg_t *msg)
+static int spiserver_validateMessage(struct spiserver_dev *spi, msg_t *msg)
 {
-    mutexLock(spi->lock);
-
     if (spi->init != 1) {
         log_error("%s: SPI not initialized\n", NAME);
-        msg->o.io.err = err_init;
-        mutexUnlock(spi->lock);
-        return;
+        return err_init;
     }
 
     if (msg->i.data == NULL || msg->o.data == NULL) {
         log_error("%s: Data null\n", NAME);
-        msg->o.io.err = err_other;
-        mutexUnlock(spi->lock);
-        return;
+        return err_other;
     }
 
     /* Size of buffer for incoming data has to be at least as big as outgoing data */
     if (msg->o.size < msg->i.size) {
         log_error("%s: Input size smaller than output size (in: %d, o: %d\n", 
                   NAME, msg->i.size, msg->o.size);
-        msg->o.io.err = err_other;
-        mutexUnlock(spi->lock);
-        return;
+        return err_other;
     }
 
-    msg->o.io.err = err_ok;
+    return err_ok;
+}
+
+
+static void spiserver_handleSynchronous(struct spiserver_dev *spi, msg_t *msg)
+{
+    if (spiserver_validateMessage(spi, msg) != err_ok)
+        return;
+
+    mutexLock(spi->lock);   
     ecspi_exchange(spi->dev_no, msg->i.data, msg->o.data, msg->i.size);
     mutexUnlock(spi->lock);
 }
@@ -78,8 +79,10 @@ static void spiserver_handleSynchronous(struct spiserver_dev *spi, msg_t *msg)
 
 static void spiserver_handleAsynchronous(struct spiserver_dev *spi, msg_t *msg)
 {
+    if (spiserver_validateMessage(spi, msg) != err_ok)
+        return;
+    
     mutexLock(spi->lock);
-    msg->o.io.err = err_ok;
     ecspi_writeAsync(&spi->ctx, msg->i.data, msg->i.size);
     mutexUnlock(spi->lock);
 }
