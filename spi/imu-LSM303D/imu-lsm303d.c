@@ -14,11 +14,13 @@
 #include <sys/msg.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <syslog.h>
 
 #include <spiserver.h>
 
 #define LIN_ACC_SENSITIVITY 0.000122 /* Value of sensitivity for +-4g acceleration */
 #define LSM303D_IDENTITY 0x49
+#define NAME "lsm303d"
 
 #define WHO_AM_I    0x0F
 #define CTRL1       0x20
@@ -33,6 +35,12 @@
 #define WRITE_OP    0x00
 #define READ_OP     0x80
 
+#define log_debug(fmt, ...) syslog(LOG_DEBUG, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...)  syslog(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...)  syslog(LOG_WARNING, fmt, ##__VA_ARGS__)
+#define log_error(fmt, ...) syslog(LOG_ERR, fmt, ##__VA_ARGS__)
+
+
 static uint8_t readRegister(msg_t *msg, uint8_t address) 
 {
     msg->type = mtRead;
@@ -40,10 +48,11 @@ static uint8_t readRegister(msg_t *msg, uint8_t address)
     ((uint8_t *)msg->i.data)[1] = 0xff;
 
     if (msgSend(msg->i.io.oid.port, msg) < 0) 
-        printf("imu: Error occured while trying to send readRegister.\n");
+        log_warn("%s: Error occured while trying to send readRegister.\n", NAME);
 
     return ((uint8_t *)msg->o.data)[1]; /* Only second byte is important to us */
 }
+
 
 static int writeRegister(msg_t *msg, uint8_t address, uint8_t message)
 {
@@ -52,12 +61,13 @@ static int writeRegister(msg_t *msg, uint8_t address, uint8_t message)
     ((uint8_t *)msg->i.data)[1] = message;
 
     if (msgSend(msg->i.io.oid.port, msg) < 0) {
-        printf("imu: Error occured while trying to send writeRegister.\n");
+        log_warn("%s: Error occured while trying to send writeRegister.\n", NAME);
         return -1;
     }
     
     return 0;
 }
+
 
 static void setupCommunication(msg_t *msg, oid_t *oid)
 {
@@ -79,6 +89,7 @@ static void setupCommunication(msg_t *msg, oid_t *oid)
     msgSend(oid->port, msg);
 }
 
+
 int main(int argc, char **argv)
 {
     msg_t msg = {0};
@@ -87,33 +98,34 @@ int main(int argc, char **argv)
     uint8_t response[2];
     int16_t accX = 0, accY = 0, accZ = 0;
 
-    printf("imu[%s %s]\n", __DATE__, __TIME__);
+    log_debug("%s: version %s %s\n", NAME, __DATE__, __TIME__);
     setupCommunication(&msg, &oid);
 
-    msg.type = mtRead;
     msg.i.io.oid = oid;
     msg.i.size = 2;
     msg.i.data = data;
     msg.o.size = 2;
     msg.o.data = response;
 
+    /* Enable sensors */
     writeRegister(&msg, CTRL1, 0x37);
     /* Set acceleration full-scale to +-4g */
     writeRegister(&msg, CTRL2, 0x08);
     
     if (readRegister(&msg, WHO_AM_I) != LSM303D_IDENTITY)
-        printf("imu: Imu gave wrong answer to whoami question!\n");
+        log_warn("%s: Imu gave wrong answer to whoami read!\n", NAME);
 
-    printf("\n");
+    printf("\n   Acceleration on three axis (x, y, z)\n\n");
 
     for(;;) {
         accX = readRegister(&msg, OUT_X_H_A) << 8 | readRegister(&msg, OUT_X_L_A);
         accY = readRegister(&msg, OUT_Y_H_A) << 8 | readRegister(&msg, OUT_Y_L_A);
         accZ = readRegister(&msg, OUT_Z_H_A) << 8 | readRegister(&msg, OUT_Z_L_A);
 
-        printf("\rx: %6.3f\ty:%6.3f\tz:%6.3f ", accX * LIN_ACC_SENSITIVITY,
-                                                accY * LIN_ACC_SENSITIVITY,
-                                                accZ * LIN_ACC_SENSITIVITY);
+        printf("\rx: %6.3fg\ty:%6.3fg\tz:%6.3fg ",  NAME,
+                                                    accX * LIN_ACC_SENSITIVITY,
+                                                    accY * LIN_ACC_SENSITIVITY,
+                                                    accZ * LIN_ACC_SENSITIVITY);
         fflush(stdout);
 
         usleep(100000);

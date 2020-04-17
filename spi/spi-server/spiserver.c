@@ -14,12 +14,19 @@
 #include <unistd.h> /* For usleep, delete later */
 #include <stdio.h>
 #include <errno.h>
+#include <syslog.h>
 #include <sys/threads.h>
 
 #include "spiserver.h"
 
-static const int thrPriority = 4;
-static const int thrAmount = 3; /* Amount of additional threads */
+#define THREAD_PRIORITY 4
+#define THREAD_AMOUNT 3
+#define NAME "spiserver"
+
+#define log_debug(fmt, ...) syslog(LOG_DEBUG, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...)  syslog(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...)  syslog(LOG_WARNING, fmt, ##__VA_ARGS__)
+#define log_error(fmt, ...) syslog(LOG_ERR, fmt, ##__VA_ARGS__)
 
 /* Struct keeping */
 struct spiserver_dev {
@@ -35,27 +42,29 @@ struct spiserver_threadData {
     struct spiserver_dev *devs; /* Array of device structures */
 };
 
+
 static void spiserver_handleSynchronous(struct spiserver_dev *spi, msg_t *msg)
 {
     mutexLock(spi->lock);
 
     if (spi->init != 1) {
-        printf("spi: SPI not initialized\n");
+        log_error("%s: SPI not initialized\n", NAME);
         msg->o.io.err = err_init;
         mutexUnlock(spi->lock);
         return;
     }
 
     if (msg->i.data == NULL || msg->o.data == NULL) {
-        printf("spi: Data null\n");
+        log_error("%s: Data null\n", NAME);
         msg->o.io.err = err_other;
         mutexUnlock(spi->lock);
         return;
     }
 
-    /* According to docs size of buffer for incoming data has to be at least as big as outgoing data */
+    /* Size of buffer for incoming data has to be at least as big as outgoing data */
     if (msg->o.size < msg->i.size) {
-        printf("spi: Input size smaller than output size (in: %d, o: %d\n", msg->i.size, msg->o.size);
+        log_error("%s: Input size smaller than output size (in: %d, o: %d\n", 
+                  NAME, msg->i.size, msg->o.size);
         msg->o.io.err = err_other;
         mutexUnlock(spi->lock);
         return;
@@ -66,6 +75,7 @@ static void spiserver_handleSynchronous(struct spiserver_dev *spi, msg_t *msg)
     mutexUnlock(spi->lock);
 }
 
+
 static void spiserver_handleAsynchronous(struct spiserver_dev *spi, msg_t *msg)
 {
     mutexLock(spi->lock);
@@ -74,58 +84,53 @@ static void spiserver_handleAsynchronous(struct spiserver_dev *spi, msg_t *msg)
     mutexUnlock(spi->lock);
 }
 
-/* TODO remove unnecessary printf */
+
 static void spiserver_handleCtl(struct spiserver_dev *spi, msg_t *msg)
 { 
     mutexLock(spi->lock);
     struct spiserver_ctl ctl = *(struct spiserver_ctl *)msg->i.raw;
     if ((ctl.fun & set_init) != 0) {
         ecspi_init(ctl.dev_no, ctl.chan_msk);
-        printf("set_init %d %d\n", ctl.dev_no, ctl.chan_msk);
+        log_debug("%s: set_init %d %d\n", NAME, ctl.dev_no, ctl.chan_msk);
         spi->init = 1;
     }
 
     if (spi->init != 1) {
         *(int *)msg->o.raw = err_init;
+        log_warn("%s: tried to configure interface without initialization\n", NAME);
         mutexUnlock(spi->lock);
         return;
     }
 
     if ((ctl.fun & set_channel) != 0) {
         ecspi_setChannel(ctl.dev_no, ctl.chan);
-        printf("ecspi_setChannel %d %d\n", ctl.dev_no, ctl.chan);
+        log_debug("%s: ecspi_setChannel %d %d\n", NAME, ctl.dev_no, ctl.chan);
     }
 
     if ((ctl.fun & set_mode) != 0) {
         ecspi_setMode(ctl.dev_no, ctl.chan, ctl.mode);
-        printf("ecspi_setMode %d %d %d\n", ctl.dev_no, ctl.chan, ctl.mode);
+        log_debug("%s: ecspi_setMode %d %d %d\n", NAME, ctl.dev_no, ctl.chan, ctl.mode);
     }
 
     if ((ctl.fun & set_clockDiv) != 0) {
         ecspi_setClockDiv(ctl.dev_no, ctl.pre, ctl.post);
-        printf("ecspi_setClockDiv %d %d %d\n", ctl.dev_no, ctl.pre, ctl.post);
+        log_debug("%s: ecspi_setClockDiv %d %d %d\n", NAME, ctl.dev_no, ctl.pre, ctl.post);
     }
 
     if ((ctl.fun & set_csDelay) != 0) {
         ecspi_setCSDelay(ctl.dev_no, ctl.csDelay);
-        printf("ecspi_setCSDelay %d %d\n", ctl.dev_no, ctl.csDelay);
+        log_debug("%s: ecspi_setCSDelay %d %d\n", NAME, ctl.dev_no, ctl.csDelay);
     }
 
     if ((ctl.fun & set_ssDelay) != 0) {
         ecspi_setSSDelay(ctl.dev_no, ctl.ssDelay);
-        printf("ecspi_setSSDelay %d %d\n", ctl.dev_no, ctl.ssDelay);
+        log_debug("%s: ecspi_setSSDelay %d %d\n", NAME, ctl.dev_no, ctl.ssDelay);
     }
     
     mutexUnlock(spi->lock); 
 }
 
-/* 
- * Getting oid from message
- * Is there better way than based on message type?
- * This approach generates some code duplicates
- * 
- * Better name for args?
- */
+
 static void spiserver_messageThread(void *arg)
 {
     msg_t msg;
@@ -160,7 +165,7 @@ static void spiserver_messageThread(void *arg)
             break;
 
         default:
-            printf("Unknown message\n");
+            log_warn("%s: unknown message received\n", NAME);
             break;
         }
 
@@ -168,16 +173,16 @@ static void spiserver_messageThread(void *arg)
     }
 }
 
-/* TODO Remove unnecessary printf later */
+
 int main(int argc, char **argv)
 {
-    char stack[thrAmount][1024] __attribute__((aligned(8)));
+    char stack[THREAD_AMOUNT][1024] __attribute__((aligned(8)));
     oid_t spiOid[4];
     struct spiserver_dev spi[4];
     struct spiserver_threadData data;
     char portName[10];
 
-    printf("spi[%s %s]\n", __DATE__, __TIME__);
+    log_debug("%s: version %s %s\n", NAME, __DATE__, __TIME__);
 
     /* Create and register port for clients */
     portCreate(&data.port);
@@ -186,7 +191,7 @@ int main(int argc, char **argv)
         spiOid[i].port = data.port;
         spiOid[i].id = i;
         if (portRegister(data.port, &portName, &spiOid[i]) < 0)
-            printf("spi: Failed to create port %s\n", &portName);
+            log_error("%s: Failed to create port %s\n", NAME, &portName);
     }
 
     /* Initialize spi device structures */
@@ -203,10 +208,9 @@ int main(int argc, char **argv)
     }
 
     data.devs = &spi;
-    /* Breaking lines? */
-    for (unsigned int i = 0; i < thrAmount; ++i)
-        beginthreadex(spiserver_messageThread, thrPriority, stack[i], sizeof(stack[i]), &data, NULL);
+    for (unsigned int i = 0; i < THREAD_AMOUNT; ++i)
+        beginthreadex(spiserver_messageThread, THREAD_PRIORITY, stack[i], sizeof(stack[i]), &data, NULL);
     spiserver_messageThread(&data);
-    printf("spiserver: Stopped SPI server\n");
+    log_info("%s: Stopped SPI server\n", NAME);
 
 }
