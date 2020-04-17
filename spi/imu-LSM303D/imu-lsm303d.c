@@ -41,7 +41,7 @@
 #define log_error(fmt, ...) syslog(LOG_ERR, fmt, ##__VA_ARGS__)
 
 
-static uint8_t readRegister(msg_t *msg, uint8_t address) 
+static uint8_t lsm303d_readRegister(msg_t *msg, uint8_t address) 
 {
     msg->type = mtRead;
     ((uint8_t *)msg->i.data)[0] = READ_OP | address;
@@ -54,7 +54,7 @@ static uint8_t readRegister(msg_t *msg, uint8_t address)
 }
 
 
-static int writeRegister(msg_t *msg, uint8_t address, uint8_t message)
+static int lsm303d_writeRegister(msg_t *msg, uint8_t address, uint8_t message)
 {
     msg->type = mtWrite;
     ((uint8_t *)msg->i.data)[0] = WRITE_OP | address;
@@ -69,7 +69,7 @@ static int writeRegister(msg_t *msg, uint8_t address, uint8_t message)
 }
 
 
-static void setupCommunication(msg_t *msg, oid_t *oid)
+static void lsm303d_setupCommunication(msg_t *msg, oid_t *oid)
 {
     struct spiserver_ctl ctl;
 
@@ -99,7 +99,7 @@ int main(int argc, char **argv)
     int16_t accX = 0, accY = 0, accZ = 0;
 
     log_debug("%s: version %s %s\n", NAME, __DATE__, __TIME__);
-    setupCommunication(&msg, &oid);
+    lsm303d_setupCommunication(&msg, &oid);
 
     msg.i.io.oid = oid;
     msg.i.size = 2;
@@ -108,19 +108,19 @@ int main(int argc, char **argv)
     msg.o.data = response;
 
     /* Enable sensors */
-    writeRegister(&msg, CTRL1, 0x37);
+    lsm303d_writeRegister(&msg, CTRL1, 0x37);
     /* Set acceleration full-scale to +-4g */
-    writeRegister(&msg, CTRL2, 0x08);
+    lsm303d_writeRegister(&msg, CTRL2, 0x08);
     
-    if (readRegister(&msg, WHO_AM_I) != LSM303D_IDENTITY)
+    if (lsm303d_readRegister(&msg, WHO_AM_I) != LSM303D_IDENTITY)
         log_warn("%s: Imu gave wrong answer to whoami read!\n", NAME);
 
     printf("\n   Acceleration on three axis (x, y, z)\n\n");
 
     for(;;) {
-        accX = readRegister(&msg, OUT_X_H_A) << 8 | readRegister(&msg, OUT_X_L_A);
-        accY = readRegister(&msg, OUT_Y_H_A) << 8 | readRegister(&msg, OUT_Y_L_A);
-        accZ = readRegister(&msg, OUT_Z_H_A) << 8 | readRegister(&msg, OUT_Z_L_A);
+        accX = lsm303d_readRegister(&msg, OUT_X_H_A) << 8 | lsm303d_readRegister(&msg, OUT_X_L_A);
+        accY = lsm303d_readRegister(&msg, OUT_Y_H_A) << 8 | lsm303d_readRegister(&msg, OUT_Y_L_A);
+        accZ = lsm303d_readRegister(&msg, OUT_Z_H_A) << 8 | lsm303d_readRegister(&msg, OUT_Z_L_A);
 
         printf("\rx: %6.3fg\ty:%6.3fg\tz:%6.3fg ",  NAME,
                                                     accX * LIN_ACC_SENSITIVITY,

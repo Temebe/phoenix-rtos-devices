@@ -20,7 +20,8 @@
 #include "spiserver.h"
 
 #define THREAD_PRIORITY 4
-#define THREAD_AMOUNT 3
+#define THREAD_AMOUNT   3
+
 #define NAME "spiserver"
 
 #define log_debug(fmt, ...) syslog(LOG_DEBUG, fmt, ##__VA_ARGS__)
